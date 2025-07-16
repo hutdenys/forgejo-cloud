@@ -1,1 +1,31 @@
 .aws/
+
+# Local .terraform directories
+**/.terraform/*
+!.terraform/*.tfstate
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+
+# Exclude override files (usually for local use)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore Terraform plan output
+*.tfplan
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
+# Sensitive variable files (if any)
+*.tfvars
+*.tfvars.json
+
+*.lock.*
