@@ -20,16 +20,17 @@ data "terraform_remote_state" "db" {
   }
 }
 
+# ECS Security Group
 resource "aws_security_group" "ecs" {
   name        = "forgejo-ecs-sg"
-  description = "Allow inbound to Forgejo container"
+  description = "Allow traffic from ALB to Forgejo container"
   vpc_id      = data.terraform_remote_state.network.outputs.vpc_id
 
   ingress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Make private or restrict later
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   egress {
@@ -44,22 +45,103 @@ resource "aws_security_group" "ecs" {
   }
 }
 
+# ALB Security Group
+resource "aws_security_group" "alb" {
+  name        = "forgejo-alb-sg"
+  description = "Allow HTTP access to ALB"
+  vpc_id      = data.terraform_remote_state.network.outputs.vpc_id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "forgejo-alb-sg"
+  }
+}
+
+# ALB Module
+module "alb" {
+  source  = "terraform-aws-modules/alb/aws"
+  version = "9.17.0"
+
+  name               = "forgejo-alb"
+  load_balancer_type = "application"
+
+  vpc_id  = data.terraform_remote_state.network.outputs.vpc_id
+  subnets = data.terraform_remote_state.network.outputs.public_subnets
+
+  security_groups            = [aws_security_group.alb.id]
+  enable_deletion_protection = false
+
+  target_groups = {
+    forgejo = {
+      name_prefix      = "fgj"
+      backend_protocol = "HTTP"
+      backend_port     = 3000
+      target_type      = "ip"
+
+      create_attachment = false
+
+      health_check = {
+        enabled             = false #temporary
+        path                = "/"
+        healthy_threshold   = 2
+        unhealthy_threshold = 2
+        timeout             = 5
+        interval            = 30
+        matcher             = "200"
+      }
+    }
+  }
+
+  listeners = {
+    http = {
+      port     = 80
+      protocol = "HTTP"
+
+      forward = {
+        target_group_key = "forgejo"
+      }
+    }
+  }
+
+  tags = {
+    Name = "forgejo-alb"
+  }
+}
+
+
+# ECS Cluster
 resource "aws_ecs_cluster" "this" {
   name = "forgejo-cluster"
 }
 
+# IAM Role for ECS Task Execution
 resource "aws_iam_role" "ecs_task_execution" {
   name = "forgejo-task-execution-role"
 
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
       }
-    }]
+    ]
   })
 }
 
@@ -68,18 +150,20 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Task Definition
 resource "aws_ecs_task_definition" "forgejo" {
   family                   = "forgejo-task"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
 
   container_definitions = jsonencode([
     {
-      name  = "forgejo"
-      image = var.forgejo_image
+      name      = "forgejo"
+      image     = var.forgejo_image
+      essential = true
       portMappings = [
         {
           containerPort = 3000
@@ -98,6 +182,7 @@ resource "aws_ecs_task_definition" "forgejo" {
   ])
 }
 
+# ECS Service
 resource "aws_ecs_service" "forgejo" {
   name            = "forgejo"
   cluster         = aws_ecs_cluster.this.id
@@ -111,5 +196,14 @@ resource "aws_ecs_service" "forgejo" {
     assign_public_ip = true
   }
 
-  depends_on = [aws_iam_role_policy_attachment.ecs_task_execution]
+  load_balancer {
+    target_group_arn = module.alb.target_groups["forgejo"].arn
+    container_name   = "forgejo"
+    container_port   = 3000
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.ecs_task_execution,
+    module.alb
+  ]
 }
