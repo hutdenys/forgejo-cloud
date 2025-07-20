@@ -1,12 +1,24 @@
 output "ecs_service_name" {
-  value = aws_ecs_service.forgejo.name
+  description = "Name of the ECS service"
+  value       = module.ecs.ecs_service_name
+}
+
+output "ecs_cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = module.ecs.ecs_cluster_name
 }
 
 output "task_definition_arn" {
-  value = aws_ecs_task_definition.forgejo.arn
+  description = "ARN of the task definition"
+  value       = module.ecs.task_definition_arn
 }
 
 output "alb_dns_name" {
-  value       = module.alb.dns_name
-  description = "The DNS name of the ALB"
+  description = "DNS name of the Application Load Balancer"
+  value       = module.elb.alb_dns_name
+}
+
+output "alb_zone_id" {
+  description = "Zone ID of the Application Load Balancer"
+  value       = module.elb.alb_zone_id
 }
