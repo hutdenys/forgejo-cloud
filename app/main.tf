@@ -94,13 +94,13 @@ module "alb" {
       create_attachment = false
 
       health_check = {
-        enabled             = false #temporary
-        path                = "/"
+        enabled             = true
+        path                = "/fake"
         healthy_threshold   = 2
-        unhealthy_threshold = 2
-        timeout             = 5
-        interval            = 30
-        matcher             = "200"
+        unhealthy_threshold = 10
+        timeout             = 2
+        interval            = 300
+        matcher             = "404"
       }
     }
   }
@@ -109,6 +109,18 @@ module "alb" {
     http = {
       port     = 80
       protocol = "HTTP"
+
+      redirect = {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+
+    https = {
+      port            = 443
+      protocol        = "HTTPS"
+      certificate_arn = aws_acm_certificate.forgejo.arn
 
       forward = {
         target_group_key = "forgejo"
@@ -121,6 +133,16 @@ module "alb" {
   }
 }
 
+# EFS Module
+module "efs" {
+  source = "../efs"
+
+  name                  = "forgejo-efs"
+  creation_token        = "forgejo-efs"
+  vpc_id                = data.terraform_remote_state.network.outputs.vpc_id
+  subnet_ids            = data.terraform_remote_state.network.outputs.private_subnets
+  ecs_security_group_id = aws_security_group.ecs.id
+}
 
 # ECS Cluster
 resource "aws_ecs_cluster" "this" {
@@ -150,6 +172,73 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy_attachment" "ssm_ecs_exec" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_policy" "ecs_exec_custom" {
+  name        = "ECSExecCustomPolicy"
+  description = "Allows ECS Exec functionality for SSM"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_exec_custom_attach" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = aws_iam_policy.ecs_exec_custom.arn
+}
+
+# IAM Role for ECS Task
+resource "aws_iam_role" "ecs_task" {
+  name = "forgejo-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Service = "ecs-tasks.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_efs_policy" {
+  name = "forgejo-task-efs-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+          "elasticfilesystem:ClientRootAccess"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+
 # Task Definition
 resource "aws_ecs_task_definition" "forgejo" {
   family                   = "forgejo-task"
@@ -158,6 +247,19 @@ resource "aws_ecs_task_definition" "forgejo" {
   cpu                      = "512"
   memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  volume {
+    name = "forgejo-data"
+    efs_volume_configuration {
+      file_system_id     = module.efs.file_system_id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = module.efs.access_point_id
+        iam             = "ENABLED"
+      }
+    }
+  }
 
   container_definitions = jsonencode([
     {
@@ -171,24 +273,27 @@ resource "aws_ecs_task_definition" "forgejo" {
           protocol      = "tcp"
         }
       ],
-      environment = [
-        { name = "FORGEJO__database__DB_TYPE", value = "mysql" },
-        { name = "FORGEJO__database__HOST", value = data.terraform_remote_state.db.outputs.db_endpoint },
-        { name = "FORGEJO__database__NAME", value = var.db_name },
-        { name = "FORGEJO__database__USER", value = var.db_username },
-        { name = "FORGEJO__database__PASSWD", value = var.db_password }
+      mountPoints = [
+        {
+          sourceVolume  = "forgejo-data"
+          containerPath = "/data"
+          readOnly      = false
+        }
       ]
     }
   ])
+
+
 }
 
 # ECS Service
 resource "aws_ecs_service" "forgejo" {
-  name            = "forgejo"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.forgejo.arn
-  launch_type     = "FARGATE"
-  desired_count   = 1
+  name                   = "forgejo"
+  cluster                = aws_ecs_cluster.this.id
+  task_definition        = aws_ecs_task_definition.forgejo.arn
+  launch_type            = "FARGATE"
+  desired_count          = 1
+  enable_execute_command = true
 
   network_configuration {
     subnets          = data.terraform_remote_state.network.outputs.public_subnets
@@ -206,4 +311,13 @@ resource "aws_ecs_service" "forgejo" {
     aws_iam_role_policy_attachment.ecs_task_execution,
     module.alb
   ]
+}
+
+resource "aws_acm_certificate" "forgejo" {
+  domain_name       = "forgejo.pp.ua"
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
