@@ -20,6 +20,15 @@ data "terraform_remote_state" "db" {
   }
 }
 
+data "terraform_remote_state" "acm" {
+  backend = "s3"
+  config = {
+    bucket = "my-tf-state-bucket535845769543"
+    key    = "acm/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
 # ECS Security Group
 resource "aws_security_group" "ecs" {
   name        = "forgejo-ecs-sg"
@@ -120,7 +129,7 @@ module "alb" {
     https = {
       port            = 443
       protocol        = "HTTPS"
-      certificate_arn = aws_acm_certificate.forgejo.arn
+      certificate_arn = data.terraform_remote_state.acm.outputs.certificate_arn
 
       forward = {
         target_group_key = "forgejo"
@@ -311,13 +320,4 @@ resource "aws_ecs_service" "forgejo" {
     aws_iam_role_policy_attachment.ecs_task_execution,
     module.alb
   ]
-}
-
-resource "aws_acm_certificate" "forgejo" {
-  domain_name       = "forgejo.pp.ua"
-  validation_method = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
