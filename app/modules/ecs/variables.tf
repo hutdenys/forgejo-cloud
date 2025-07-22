@@ -74,11 +74,13 @@ variable "assign_public_ip" {
 variable "efs_file_system_id" {
   description = "EFS file system ID"
   type        = string
+  default     = null
 }
 
 variable "efs_access_point_id" {
   description = "EFS access point ID"
   type        = string
+  default     = null
 }
 
 variable "mount_path" {

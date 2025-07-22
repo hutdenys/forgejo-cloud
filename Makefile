@@ -96,15 +96,7 @@ status:
 		--region $(AWS_REGION) \
 		--query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount,Pending:pendingCount}' \
 		--output table
-	@echo ""
-	@echo "=== Recent Deployment ==="
-	@aws ecs describe-services \
-		--cluster $(ECS_CLUSTER) \
-		--services $(ECS_SERVICE) \
-		--region $(AWS_REGION) \
-		--query 'services[0].deployments[0].{Status:status,CreatedAt:createdAt,UpdatedAt:updatedAt}' \
-		--output table
-
+	
 tasks:
 	@echo "=== Running Tasks ==="
 	@powershell -Command "\

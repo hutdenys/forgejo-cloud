@@ -114,8 +114,9 @@ resource "aws_iam_role" "ecs_task" {
 }
 
 resource "aws_iam_role_policy" "ecs_task_efs_policy" {
-  name = "${var.name_prefix}-task-efs-policy"
-  role = aws_iam_role.ecs_task.id
+  count = var.efs_file_system_id != null ? 1 : 0
+  name  = "${var.name_prefix}-task-efs-policy"
+  role  = aws_iam_role.ecs_task.id
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -143,14 +144,17 @@ resource "aws_ecs_task_definition" "this" {
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
-  volume {
-    name = "${var.name_prefix}-data"
-    efs_volume_configuration {
-      file_system_id     = var.efs_file_system_id
-      transit_encryption = "ENABLED"
-      authorization_config {
-        access_point_id = var.efs_access_point_id
-        iam             = "ENABLED"
+  dynamic "volume" {
+    for_each = var.efs_file_system_id != null ? [1] : []
+    content {
+      name = "${var.name_prefix}-data"
+      efs_volume_configuration {
+        file_system_id     = var.efs_file_system_id
+        transit_encryption = "ENABLED"
+        authorization_config {
+          access_point_id = var.efs_access_point_id
+          iam             = "ENABLED"
+        }
       }
     }
   }
@@ -167,13 +171,13 @@ resource "aws_ecs_task_definition" "this" {
           protocol      = "tcp"
         }
       ],
-      mountPoints = [
+      mountPoints = var.efs_file_system_id != null ? [
         {
           sourceVolume  = "${var.name_prefix}-data"
           containerPath = var.mount_path
           readOnly      = false
         }
-      ]
+      ] : []
       logConfiguration = {
         logDriver = "awslogs"
         options = {

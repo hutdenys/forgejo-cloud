@@ -1,3 +1,14 @@
+variable "aws_region" {
+  description = "AWS region for resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "state_bucket" {
+  description = "S3 bucket name for Terraform state"
+  type        = string
+}
+
 variable "name" {
   description = "Name prefix for resources"
   type        = string
@@ -6,16 +17,4 @@ variable "name" {
 variable "creation_token" {
   description = "Unique token for EFS creation"
   type        = string
-}
-
-variable "vpc_id" {
-  type = string
-}
-
-variable "subnet_ids" {
-  type = list(string)
-}
-
-variable "ecs_security_group_id" {
-  type = string
 }
