@@ -16,9 +16,9 @@
 AWS_REGION := us-east-1
 ECS_CLUSTER := forgejo-cluster
 ECS_SERVICE := forgejo
-TERRAFORM_DIRS := network acm db efs app jenkins
+TERRAFORM_DIRS := network acm db efs app jenkins route53
 
-.PHONY: help scale scale-up scale-down status logs deploy-app deploy-jenkins deploy-all destroy-all
+.PHONY: help scale scale-up scale-down status logs deploy-app deploy-jenkins deploy-route53 deploy-all destroy-all check-dns
 
 # Default target
 help:
@@ -37,6 +37,7 @@ help:
 	@echo "Deployment Commands:"
 	@echo "  make deploy-app        - Deploy/update Forgejo application"
 	@echo "  make deploy-jenkins    - Deploy/update Jenkins"
+	@echo "  make deploy-route53    - Deploy/update Route 53 DNS"
 	@echo "  make deploy-all        - Deploy all infrastructure modules"
 	@echo ""
 	@echo "Infrastructure Commands:"
@@ -47,6 +48,7 @@ help:
 	@echo "Utility Commands:"
 	@echo "  make endpoints         - Show service endpoints"
 	@echo "  make ssh-jenkins       - SSH to Jenkins instance"
+	@echo "  make check-dns         - Check DNS resolution"
 
 # Scaling commands
 scale:
@@ -135,6 +137,11 @@ deploy-jenkins:
 	@cd jenkins && terraform init && terraform apply -auto-approve
 	@echo "Jenkins deployed!"
 
+deploy-route53:
+	@echo "Deploying Route 53 DNS..."
+	@cd route53 && terraform init && terraform apply -auto-approve
+	@echo "Route 53 deployed!"
+
 deploy-all:
 	@echo "Deploying all infrastructure..."
 	@powershell -Command "\
@@ -215,6 +222,21 @@ endpoints:
 			Write-Host '  Not deployed'; \
 		}; \
 		Set-Location .."
+	@echo ""
+	@echo "DNS Records (Route 53):"
+	@powershell -Command "\
+		Set-Location route53; \
+		$$forgejo = terraform output forgejo_fqdn 2>$$null; \
+		if ($$forgejo) { \
+			$$domain = $$forgejo.Trim('\"'); \
+			Write-Host \"  Forgejo: https://$$domain\"; \
+		}; \
+		$$jenkins = terraform output jenkins_fqdn 2>$$null; \
+		if ($$jenkins) { \
+			$$domain = $$jenkins.Trim('\"'); \
+			Write-Host \"  Jenkins: http://$$domain:8080\"; \
+		}; \
+		Set-Location .." 2>$null || echo "  Route 53 not deployed"
 
 ssh-jenkins:
 	@echo "Connecting to Jenkins instance..."
@@ -233,7 +255,7 @@ ssh-jenkins:
 quick-deploy:
 	@echo "Quick deployment in correct order..."
 	@powershell -Command "\
-		$$modules = @('network', 'acm', 'db', 'efs', 'app', 'jenkins'); \
+		$$modules = @('network', 'acm', 'db', 'efs', 'app', 'jenkins', 'route53'); \
 		$$modules | ForEach-Object { \
 			Set-Location $$_; \
 			terraform init; \
@@ -242,3 +264,32 @@ quick-deploy:
 		}"
 	@echo "Quick deployment completed!"
 	@make endpoints
+
+# DNS verification
+check-dns:
+	@echo "=== DNS Resolution Check ==="
+	@powershell -Command "\
+		Set-Location route53; \
+		$$forgejo = terraform output forgejo_fqdn 2>$$null; \
+		if ($$forgejo) { \
+			$$domain = $$forgejo.Trim('\"'); \
+			Write-Host \"Checking Forgejo DNS: $$domain\"; \
+			try { \
+				$$result = Resolve-DnsName $$domain -Type A; \
+				Write-Host \"  Resolved to: $$($result.IPAddress -join ', ')\"; \
+			} catch { \
+				Write-Host \"  DNS resolution failed: $$($_.Exception.Message)\"; \
+			} \
+		}; \
+		$$jenkins = terraform output jenkins_fqdn 2>$$null; \
+		if ($$jenkins) { \
+			$$domain = $$jenkins.Trim('\"'); \
+			Write-Host \"Checking Jenkins DNS: $$domain\"; \
+			try { \
+				$$result = Resolve-DnsName $$domain -Type A; \
+				Write-Host \"  Resolved to: $$($result.IPAddress -join ', ')\"; \
+			} catch { \
+				Write-Host \"  DNS resolution failed: $$($_.Exception.Message)\"; \
+			} \
+		}; \
+		Set-Location .." 2>$null || echo "Route 53 not deployed"
