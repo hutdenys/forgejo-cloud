@@ -1,20 +1,18 @@
 #!/bin/bash
 
-# Логування всіх команд
 exec > >(tee /var/log/user-data.log) 2>&1
 echo "Starting user-data script at $(date)"
 
 # Update system
 dnf update -y
 
-# Install Java 17 (використовуємо Amazon Corretto)
+# Install Java 17
 dnf install -y java-17-amazon-corretto java-17-amazon-corretto-devel
 
-# Set JAVA_HOME системно
+# Set JAVA_HOME
 echo 'JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto' >> /etc/environment
 export JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto
 
-# Перевірка Java
 java -version || { echo "Java installation failed"; exit 1; }
 
 # Wait for EBS volume to be available
@@ -68,13 +66,6 @@ curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip
 unzip awscliv2.zip
 ./aws/install
 rm -rf aws awscliv2.zip
-
-# Install Terraform
-echo "Installing Terraform..."
-wget -O terraform.zip https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
-unzip terraform.zip
-mv terraform /usr/local/bin/
-rm terraform.zip
 
 # Install useful tools
 echo "Installing additional tools..."

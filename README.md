@@ -1,230 +1,272 @@
 # Forgejo Cloud Infrastructure
 
-This repository contains Terraform infrastructure as code for deploying Forgejo (a lightweight Git service) on AWS using a microservices architecture with separate state management.
+**Complete solution for deploying Forgejo (Git service) on AWS with microservices architecture and full automation**
 
-## Architecture Overview
+This repository contains Terraform Infrastructure as Code for deploying a scalable Forgejo Git service on AWS using ECS Fargate, RDS, EFS, and a complete CI/CD toolchain.
 
-The infrastructure is split into independent modules, each managing its own Terraform state:
+## 🏗️ Architecture Overview
+
+The infrastructure is split into independent modules with separate state management for better modularity and scalability:
 
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   Network   │    │     ACM     │    │     EFS     │
-│   (VPC)     │    │ (SSL Cert)  │    │ (Storage)   │
-└─────────────┘    └─────────────┘    └─────────────┘
-       │                   │                   │
-       └───────────────────┼───────────────────┘
-                           │
-                  ┌─────────────┐    ┌─────────────┐
-                  │     App     │    │     DB      │
-                  │   (ECS)     │    │   (RDS)     │
-                  └─────────────┘    └─────────────┘
-                           │                   
-                  ┌─────────────┐    ┌─────────────┐
-                  │  Route 53   │    │   Jenkins   │
-                  │   (DNS)     │    │   (CI/CD)   │
-                  └─────────────┘    └─────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    Forgejo Cloud Infrastructure                  │
+├─────────────┬─────────────┬─────────────┬─────────────────────────┤
+│ Network-SG  │     ACM     │     EFS     │        Route 53         │
+│ VPC & Sec   │ SSL/TLS     │  Storage    │      DNS Management     │
+│ Groups      │ Certificate │ Encrypted   │    Custom Domains       │
+└─────┬───────┴─────┬───────┴─────┬───────┴──────────┬──────────────┘
+      │             │             │                  │
+      └─────────────┼─────────────┼──────────────────┘
+                    │             │
+         ┌──────────┴──────┬──────┴──────┐
+         │                 │             │
+    ┌────▼────┐      ┌─────▼─────┐  ┌────▼────┐
+    │   App   │      │    DB     │  │ Jenkins │
+    │  (ECS)  │◄────►│  (RDS)    │  │ (CI/CD) │
+    │ Fargate │      │  MySQL    │  │  EC2    │
+    └─────────┘      └───────────┘  └─────────┘
 ```
 
-## Modules
+## 📦 Modules
 
-### 1. Network (`network/`)
-- **Purpose**: VPC, subnets, gateways, and basic networking
-- **Resources**: VPC, public/private subnets, IGW, NAT Gateway
+## 📦 Modules
+
+### 1. **Network & Security Groups** (`network-sg/`)
+- **Purpose**: VPC, subnets, gateways, and comprehensive security groups
+- **Resources**: VPC, public/private subnets, IGW, NAT Gateway, Security Groups for all services
 - **Dependencies**: None (deploy first)
 
-### 2. ACM (`acm/`)
-- **Purpose**: SSL/TLS certificates for HTTPS
-- **Resources**: ACM certificate with DNS validation
-- **Dependencies**: None
+### 2. **ACM Certificate** (`acm/`)
+- **Purpose**: SSL/TLS certificates for HTTPS encryption
+- **Resources**: ACM certificate with DNS validation for `forgejo.pp.ua`
+- **Dependencies**: None (can deploy in parallel with network)
 
-### 3. Database (`db/`)
-- **Purpose**: MySQL RDS instance for Forgejo data
-- **Resources**: RDS instance, security groups, subnet groups
+### 3. **Database** (`db/`)
+- **Purpose**: MySQL RDS instance for Forgejo data persistence
+- **Resources**: RDS instance (db.t3.micro), subnet groups, security groups
 - **Dependencies**: Network module
 
-### 4. EFS (`efs/`)
+### 4. **EFS Storage** (`efs/`)
 - **Purpose**: Persistent file storage for Forgejo repositories
-- **Resources**: EFS file system, mount targets, access points
-- **Dependencies**: Network module
+- **Resources**: EFS file system (encrypted), mount targets, access points
+- **Dependencies**: Network and App modules (requires ECS security group)
 
-### 5. Application (`app/`)
-- **Purpose**: Main Forgejo application on ECS Fargate
-- **Resources**: ECS cluster, ALB, security groups, IAM roles
-- **Dependencies**: Network, Database, ACM, EFS modules
+### 5. **Application** (`app/`)
+- **Purpose**: Main Forgejo application on ECS Fargate with load balancing
+- **Resources**: ECS cluster, ALB with SSL, security groups, IAM roles
+- **Submodules**: ELB (Application Load Balancer), ECS (Elastic Container Service)
+- **Dependencies**: Network, Database, ACM modules
 
-### 6. Route 53 (`route53/`)
-- **Purpose**: DNS management for custom domains
-- **Resources**: A/CNAME records, health checks, CloudWatch alarms
+### 6. **Route 53 DNS** (`route53/`)
+- **Purpose**: DNS management for custom domains and subdomains
+- **Resources**: A/CNAME records, health checks, CloudWatch monitoring
+- **Domains**: `forgejo.pp.ua`, `jenkins.forgejo.pp.ua`
 - **Dependencies**: Application module (ALB), optionally Jenkins module
 
-### 7. Jenkins (`jenkins/`)
-- **Purpose**: CI/CD pipeline server
-- **Resources**: EC2 instance, EBS storage, security groups
+### 7. **Jenkins CI/CD** (`jenkins/`)
+- **Purpose**: Continuous Integration/Continuous Deployment server
+- **Resources**: EC2 instance (t3.small), EBS storage (50GB), security groups
 - **Dependencies**: Network module
 
-## Deployment Order
+## 🚀 Deployment Order
+
+## 🚀 Deployment Order
 
 Deploy modules in the following order due to dependencies:
 
-1. **Network** - Creates VPC and networking foundation
-2. **ACM** - Creates SSL certificate (can be parallel with network)
-3. **Database** - Creates RDS instance
-4. **EFS** - Creates file storage (can be parallel with database)
-5. **Application** - Deploys the main application
-6. **Jenkins** - Deploys CI/CD server (optional, can be parallel with app)
-7. **Route 53** - Creates DNS records (deploy after app and jenkins)
+1. **network-sg** - Creates VPC and networking foundation with security groups
+2. **acm** - Creates SSL certificate (can deploy in parallel with network)
+3. **db** - Creates RDS MySQL instance
+4. **app** - Deploys the main Forgejo application (creates ECS security group needed by EFS)
+5. **efs** - Creates file storage (requires ECS security group from app module)
+6. **jenkins** - Deploys CI/CD server (optional, can deploy in parallel with app)
+7. **route53** - Creates DNS records (deploy after app and jenkins are ready)
 
-## Quick Start
+## ⚡ Quick Start
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd forgejo-cloud
-   ```
+### Automated Deployment (Recommended)
 
-2. **Configure AWS credentials:**
-   ```bash
-   aws configure
-   ```
+```bash
+# Clone repository
+git clone <repository-url>
+cd forgejo-cloud
 
-3. **Deploy infrastructure:**
-   ```bash
-   # Option 1: Use Makefile for automated deployment
-   make quick-deploy
-   
-   # Option 2: Manual deployment in correct order
-   # Deploy network first
-   cd network/
-   terraform init
-   terraform apply
-   
-   # Deploy ACM certificate
-   cd ../acm/
-   terraform init
-   terraform apply
-   
-   # Deploy database
-   cd ../db/
-   terraform init
-   terraform apply
-   
-   # Deploy EFS
-   cd ../efs/
-   terraform init
-   terraform apply
-   
-   # Deploy application
-   cd ../app/
-   terraform init
-   terraform apply
-   
-   # Deploy Jenkins (optional)
-   cd ../jenkins/
-   terraform init
-   terraform apply
-   
-   # Deploy Route 53 DNS
-   cd ../route53/
-   terraform init
-   terraform apply
-   ```
+# Configure AWS credentials
+aws configure
 
-4. **Configure Route 53 (if using custom domain):**
-   ```bash
-   # Edit Route 53 configuration
-   cd route53/
-   vim terraform.tfvars
-   # Set your domain_name and other DNS settings
-   ```
+# Quick deployment of entire infrastructure
+make quick-deploy
 
-## Configuration
+# Check deployment status and endpoints
+make status
+make endpoints
+```
 
-Each module has its own `terraform.tfvars` file for configuration. Key settings:
+### Manual Step-by-Step Deployment
 
-- **Network**: VPC CIDR, subnet ranges, availability zones
-- **ACM**: Domain name for SSL certificate
-- **Database**: Instance class, credentials, database name
-- **Application**: Forgejo Docker image version
-- **Route 53**: Domain name, subdomains, health check settings
-- **Jenkins**: Instance type, key pair, allowed IP ranges
+```bash
+# 1. Network and security groups
+cd network-sg && terraform init && terraform apply && cd ..
 
-## State Management
+# 2. SSL certificate
+cd acm && terraform init && terraform apply && cd ..
 
-Each module maintains its own Terraform state in S3:
-- `network/terraform.tfstate`
-- `acm/terraform.tfstate`
-- `db/terraform.tfstate`
-- `efs/terraform.tfstate`
-- `app/terraform.tfstate`
-- `jenkins/terraform.tfstate`
-- `route53/terraform.tfstate`
+# 3. Database
+cd db && terraform init && terraform apply && cd ..
 
-This separation allows for:
-- Independent deployments
-- Reduced blast radius
+# 4. Application (creates ECS security group)
+cd app && terraform init && terraform apply && cd ..
+
+# 5. File storage (requires ECS security group)
+cd efs && terraform init && terraform apply && cd ..
+
+# 6. Jenkins (optional)
+cd jenkins && terraform init && terraform apply && cd ..
+
+# 7. DNS records
+cd route53 && terraform init && terraform apply && cd ..
+```
+
+## ⚙️ Configuration
+
+Each module has its own `terraform.tfvars` file for customization:
+
+- **network-sg**: VPC CIDR (10.0.0.0/16), availability zones, subnet ranges
+- **acm**: Domain name for SSL certificate (`forgejo.pp.ua`)
+- **db**: MySQL instance class (db.t3.micro), credentials, database name
+- **app**: Forgejo Docker image version, container resources
+- **efs**: Storage class, encryption settings
+- **jenkins**: EC2 instance type (t3.small), key pair, allowed IP ranges
+- **route53**: Domain names, DNS record types, health check settings
+
+## 🗂️ State Management
+
+Each module maintains its own Terraform state in S3 for better isolation:
+
+```
+S3 Bucket: my-tf-state-bucket535845769543
+├── network-sg/terraform.tfstate
+├── acm/terraform.tfstate
+├── db/terraform.tfstate
+├── efs/terraform.tfstate
+├── app/terraform.tfstate
+├── jenkins/terraform.tfstate
+└── route53/terraform.tfstate
+```
+
+**Benefits of separate states:**
+- Independent deployments and rollbacks
+- Reduced blast radius for changes
 - Better team collaboration
-- Easier maintenance
+- Easier maintenance and troubleshooting
 
-## Management Commands
+## 🛠️ Management Commands
 
 The project includes a comprehensive Makefile for infrastructure management:
 
 ### Scaling Commands
-- `make scale COUNT=N` - Scale Forgejo to N containers
+- `make scale COUNT=N` - Scale Forgejo service to N containers
 - `make scale-up` - Increase container count by 1
 - `make scale-down` - Decrease container count by 1
 
 ### Monitoring Commands
-- `make status` - Show ECS service status
-- `make logs` - Show recent application logs
-- `make tasks` - List running ECS tasks
+- `make status` - Show ECS service status and health
+- `make logs` - Show recent application logs (last 1 hour)
+- `make tasks` - List running ECS tasks with details
 
 ### Deployment Commands
 - `make deploy-app` - Deploy/update Forgejo application
-- `make deploy-jenkins` - Deploy/update Jenkins
-- `make deploy-route53` - Deploy/update Route 53 DNS
+- `make deploy-jenkins` - Deploy/update Jenkins server
+- `make deploy-route53` - Deploy/update Route 53 DNS records
 - `make deploy-all` - Deploy all infrastructure modules
-- `make quick-deploy` - Deploy all modules in correct order
+- `make quick-deploy` - Deploy all modules in correct dependency order
 
 ### Infrastructure Commands
 - `make init-all` - Initialize all Terraform modules
 - `make plan-all` - Plan all Terraform modules
-- `make destroy-all` - Destroy all infrastructure
+- `make destroy-all` - Destroy all infrastructure (with confirmation)
 
 ### Utility Commands
-- `make endpoints` - Show service endpoints and DNS names
-- `make ssh-jenkins` - SSH to Jenkins instance
+- `make endpoints` - Show service endpoints and URLs
+- `make ssh-jenkins` - SSH into Jenkins EC2 instance
 - `make check-dns` - Check DNS resolution for custom domains
 
-- Database deployed in private subnets
-- EFS encrypted at rest
-- SSL/TLS termination at ALB
-- Security groups with minimal required access
-- IAM roles with least privilege
-- ECS Exec enabled for debugging
+## 🔒 Security Features
 
-## Monitoring and Maintenance
+## 🔒 Security Features
 
-- ALB health checks configured
-- ECS service auto-recovery
-- Automated database backups
-- CloudWatch logs integration
-- ECS Exec for container access
+- **Network Isolation**: Database and EFS deployed in private subnets
+- **Encryption**: EFS encrypted at rest, SSL/TLS termination at ALB
+- **Access Control**: Security groups with minimal required access
+- **IAM**: Roles with least privilege principle
+- **Monitoring**: ECS Exec enabled for secure container debugging
+- **SSH Access**: Jenkins accessible only from specified IP ranges
 
-## Cost Optimization
+## 📊 Monitoring and Maintenance
 
-- Single NAT Gateway configuration
-- t3.micro RDS instance (can be scaled)
-- Fargate with minimal CPU/memory allocation
-- EFS with standard storage class
+- **Health Checks**: ALB health checks for application availability
+- **Auto Recovery**: ECS service auto-recovery on failures
+- **Backups**: Automated RDS database backups with point-in-time recovery
+- **Logging**: CloudWatch logs integration for centralized log management
+- **Debugging**: ECS Exec for secure container access without SSH
 
-## Troubleshooting
+## 💰 Cost Optimization
+
+- **Networking**: Single NAT Gateway configuration (can be scaled to multiple AZs)
+- **Database**: t3.micro RDS instance (easily scalable)
+- **Compute**: Fargate with minimal CPU/memory allocation (0.25 vCPU, 0.5GB RAM)
+- **Storage**: EFS with standard storage class
+- **Jenkins**: t3.small EC2 instance with 50GB EBS storage
+
+## 🌐 Access URLs
+
+After successful deployment:
+
+- **Forgejo Git Service**: `https://forgejo.pp.ua`
+- **Jenkins CI/CD**: `http://jenkins.forgejo.pp.ua:8080`
+- **Direct ALB Access**: Available via `make endpoints` command
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **EFS Mount Issues**: Ensure app module is deployed before EFS (EFS needs ECS security group)
+2. **DNS Resolution**: Use `make check-dns` to verify Route 53 records
+3. **SSL Certificate**: Verify ACM certificate validation in AWS console
+4. **Jenkins Access**: Check security group allows your IP address
+
+### Debug Commands
+
+```bash
+# Check ECS service status
+make status
+
+# View application logs
+make logs
+
+# List running tasks
+make tasks
+
+# Check all endpoints
+make endpoints
+
+# Test DNS resolution
+make check-dns
+
+# SSH into Jenkins
+make ssh-jenkins
+```
 
 See individual module README files for specific troubleshooting guides.
 
-## Contributing
+## 🤝 Contributing
 
-1. Make changes in feature branches
-2. Test in development environment
-3. Update documentation
-4. Submit pull request
+1. Create feature branches for changes
+2. Test in development environment first
+3. Update relevant documentation
+4. Submit pull request with detailed description
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
