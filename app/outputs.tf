@@ -22,8 +22,3 @@ output "alb_zone_id" {
   description = "Zone ID of the Application Load Balancer"
   value       = module.elb.alb_zone_id
 }
-
-output "ecs_security_group_id" {
-  description = "ID of the ECS security group"
-  value       = module.ecs.ecs_security_group_id
-}

@@ -52,3 +52,8 @@ variable "health_check" {
     matcher             = "404"
   }
 }
+
+variable "alb_security_group_id" {
+  description = "Security Group ID for ALB"
+  type        = string
+}

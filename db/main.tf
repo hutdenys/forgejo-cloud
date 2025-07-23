@@ -11,30 +11,6 @@ data "terraform_remote_state" "network" {
   }
 }
 
-resource "aws_security_group" "rds" {
-  name        = "forgejo-rds-sg"
-  description = "Allow access to RDS"
-  vpc_id      = data.terraform_remote_state.network.outputs.vpc_id
-
-  ingress {
-    from_port   = 3306
-    to_port     = 3306
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Replace with more secure rule later
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "forgejo-rds-sg"
-  }
-}
-
 resource "aws_db_subnet_group" "rds" {
   name       = "forgejo-db-subnet-group"
   subnet_ids = data.terraform_remote_state.network.outputs.private_subnets
@@ -61,7 +37,9 @@ module "db" {
   db_name              = var.db_name
   port                 = 3306
 
-  vpc_security_group_ids = [aws_security_group.rds.id]
+  manage_master_user_password = false
+
+  vpc_security_group_ids = [data.terraform_remote_state.network.outputs.rds_security_group_id]
   db_subnet_group_name   = aws_db_subnet_group.rds.name
   create_db_subnet_group = false
 

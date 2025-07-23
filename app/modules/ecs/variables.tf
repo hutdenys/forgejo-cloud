@@ -100,3 +100,8 @@ variable "log_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "ecs_security_group_id" {
+  description = "Security Group ID for ECS tasks"
+  type        = string
+}

@@ -42,10 +42,11 @@ data "terraform_remote_state" "efs" {
 module "elb" {
   source = "./modules/elb"
 
-  name_prefix     = "forgejo"
-  vpc_id          = data.terraform_remote_state.network.outputs.vpc_id
-  subnets         = data.terraform_remote_state.network.outputs.public_subnets
-  certificate_arn = data.terraform_remote_state.acm.outputs.certificate_arn
+  name_prefix           = "forgejo"
+  vpc_id                = data.terraform_remote_state.network.outputs.vpc_id
+  subnets               = data.terraform_remote_state.network.outputs.public_subnets
+  certificate_arn       = data.terraform_remote_state.acm.outputs.certificate_arn
+  alb_security_group_id = data.terraform_remote_state.network.outputs.alb_security_group_id
 }
 
 # ECS Module
@@ -55,9 +56,11 @@ module "ecs" {
   name_prefix           = "forgejo"
   vpc_id                = data.terraform_remote_state.network.outputs.vpc_id
   subnets               = data.terraform_remote_state.network.outputs.public_subnets
-  alb_security_group_id = module.elb.alb_security_group_id
+  alb_security_group_id = data.terraform_remote_state.network.outputs.alb_security_group_id
+  ecs_security_group_id = data.terraform_remote_state.network.outputs.ecs_security_group_id
   target_group_arn      = module.elb.target_group_arn
   container_image       = var.forgejo_image
+  assign_public_ip      = true
   efs_file_system_id    = data.terraform_remote_state.efs.outputs.file_system_id
   efs_access_point_id   = data.terraform_remote_state.efs.outputs.access_point_id
 

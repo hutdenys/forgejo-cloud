@@ -5,7 +5,3 @@ output "file_system_id" {
 output "access_point_id" {
   value = aws_efs_access_point.this.id
 }
-
-output "security_group_id" {
-  value = aws_security_group.this.id
-}

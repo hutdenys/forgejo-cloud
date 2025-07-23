@@ -16,7 +16,7 @@
 AWS_REGION := us-east-1
 ECS_CLUSTER := forgejo-cluster
 ECS_SERVICE := forgejo
-TERRAFORM_DIRS := network acm db efs app jenkins route53
+TERRAFORM_DIRS := network-sg acm db efs app jenkins route53
 
 .PHONY: help scale scale-up scale-down status logs deploy-app deploy-jenkins deploy-route53 deploy-all destroy-all check-dns
 
@@ -247,7 +247,7 @@ ssh-jenkins:
 quick-deploy:
 	@echo "Quick deployment in correct order..."
 	@powershell -Command "\
-		$$modules = @('network', 'acm', 'db', 'efs', 'app', 'jenkins', 'route53'); \
+		$$modules = @('network-sg', 'acm', 'db', 'efs', 'app', 'jenkins', 'route53'); \
 		$$modules | ForEach-Object { \
 			Set-Location $$_; \
 			terraform init; \

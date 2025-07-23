@@ -29,3 +29,5 @@ terraform.rc
 *.tfvars.json
 
 *.lock.*
+
+*.pem

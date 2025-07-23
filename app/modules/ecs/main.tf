@@ -1,28 +1,3 @@
-# ECS Security Group
-resource "aws_security_group" "ecs" {
-  name        = "${var.name_prefix}-ecs-sg"
-  description = "Allow traffic from ALB to Forgejo container"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    from_port       = var.container_port
-    to_port         = var.container_port
-    protocol        = "tcp"
-    security_groups = [var.alb_security_group_id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.name_prefix}-ecs-sg"
-  }
-}
-
 # ECS Cluster
 resource "aws_ecs_cluster" "this" {
   name = "${var.name_prefix}-cluster"
@@ -215,7 +190,7 @@ resource "aws_ecs_service" "this" {
 
   network_configuration {
     subnets          = var.subnets
-    security_groups  = [aws_security_group.ecs.id]
+    security_groups  = [var.ecs_security_group_id]
     assign_public_ip = var.assign_public_ip
   }
 

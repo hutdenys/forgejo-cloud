@@ -38,3 +38,14 @@ variable "enable_nat_gateway" {
   type        = bool
   default     = false
 }
+
+variable "ecs_container_port" {
+  description = "Port on which the ECS container listens"
+  type        = number
+  default     = 3000
+}
+
+variable "jenkins_allowed_ip_cidr" {
+  description = "CIDR block allowed to access Jenkins"
+  type        = string
+}

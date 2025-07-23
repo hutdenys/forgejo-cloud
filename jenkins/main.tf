@@ -35,44 +35,6 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
-# Security Group для Jenkins
-resource "aws_security_group" "jenkins" {
-  name        = "jenkins-sg-${random_string.suffix.result}"
-  description = "Jenkins access from specific IP only"
-  vpc_id      = data.terraform_remote_state.network.outputs.vpc_id
-
-  # Jenkins UI (тільки ваш IP)
-  ingress {
-    description = "Jenkins UI"
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = [var.allowed_ip_cidr]
-  }
-
-  # SSH (тільки ваш IP)
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.allowed_ip_cidr]
-  }
-
-  # Весь вихідний трафік
-  egress {
-    description = "All outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "jenkins-sg"
-  }
-}
-
 # EBS Volume для Jenkins Home
 resource "aws_ebs_volume" "jenkins_home" {
   availability_zone = "${var.aws_region}a"
@@ -92,14 +54,14 @@ resource "aws_instance" "jenkins" {
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = var.instance_type
   key_name               = var.key_pair_name
-  vpc_security_group_ids = [aws_security_group.jenkins.id]
+  vpc_security_group_ids = [data.terraform_remote_state.network.outputs.jenkins_security_group_id]
   subnet_id              = data.terraform_remote_state.network.outputs.public_subnets[0]
   availability_zone      = "${var.aws_region}a"
 
   # Root volume
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 20
+    volume_size           = 30
     encrypted             = true
     delete_on_termination = true
   }
