@@ -16,9 +16,9 @@
 AWS_REGION := us-east-1
 ECS_CLUSTER := forgejo-cluster
 ECS_SERVICE := forgejo
-TERRAFORM_DIRS := network-sg acm db efs app jenkins route53
+TERRAFORM_DIRS := network-sg acm ebs-jenkins db efs app jenkins route53
 
-.PHONY: help scale scale-up scale-down status logs deploy-app deploy-jenkins deploy-route53 deploy-all destroy-all check-dns
+.PHONY: help scale scale-up scale-down status logs deploy-app deploy-ebs-jenkins deploy-jenkins deploy-route53 deploy-all destroy-all check-dns
 
 # Default target
 help:
@@ -36,7 +36,8 @@ help:
 	@echo ""
 	@echo "Deployment Commands:"
 	@echo "  make deploy-app        - Deploy/update Forgejo application"
-	@echo "  make deploy-jenkins    - Deploy/update Jenkins"
+	@echo "  make deploy-ebs-jenkins - Deploy persistent EBS volume for Jenkins"
+	@echo "  make deploy-jenkins    - Deploy/update Jenkins (includes EBS)"
 	@echo "  make deploy-route53    - Deploy/update Route 53 DNS"
 	@echo "  make deploy-all        - Deploy all infrastructure modules"
 	@echo ""
@@ -124,7 +125,14 @@ deploy-app:
 	@cd app && terraform init && terraform apply -auto-approve
 	@echo "Application deployed!"
 
+deploy-ebs-jenkins:
+	@echo "Deploying persistent EBS volume for Jenkins..."
+	@cd ebs-jenkins && terraform init && terraform apply -auto-approve
+	@echo "Persistent EBS volume deployed!"
+
 deploy-jenkins:
+	@echo "Deploying persistent EBS volume first..."
+	@cd ebs-jenkins && terraform init && terraform apply -auto-approve
 	@echo "Deploying Jenkins..."
 	@cd jenkins && terraform init && terraform apply -auto-approve
 	@echo "Jenkins deployed!"

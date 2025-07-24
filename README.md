@@ -42,12 +42,18 @@ The infrastructure is split into independent modules with separate state managem
 - **Resources**: ACM certificate with DNS validation for `forgejo.pp.ua`
 - **Dependencies**: None (can deploy in parallel with network)
 
-### 3. **Database** (`db/`)
+### 3. **Persistent EBS for Jenkins** (`ebs-jenkins/`)
+- **Purpose**: Persistent EBS volume for Jenkins home directory that survives terraform destroy
+- **Resources**: Encrypted GP3 EBS volume with lifecycle protection
+- **Dependencies**: None (but must be in same AZ as Jenkins)
+- **Features**: `prevent_destroy` lifecycle rule, independent state management
+
+### 4. **Database** (`db/`)
 - **Purpose**: MySQL RDS instance for Forgejo data persistence
 - **Resources**: RDS instance (db.t3.micro), subnet groups, security groups
 - **Dependencies**: Network module
 
-### 4. **EFS Storage** (`efs/`)
+### 5. **EFS Storage** (`efs/`)
 - **Purpose**: Persistent file storage for Forgejo repositories
 - **Resources**: EFS file system (encrypted), mount targets, access points
 - **Dependencies**: Network and App modules (requires ECS security group)

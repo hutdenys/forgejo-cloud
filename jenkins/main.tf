@@ -2,12 +2,22 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Remote state для мережі
+# Remote state for network
 data "terraform_remote_state" "network" {
   backend = "s3"
   config = {
     bucket = "my-tf-state-bucket535845769543"
     key    = "network/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+# Remote state for persistent EBS volume
+data "terraform_remote_state" "ebs_jenkins" {
+  backend = "s3"
+  config = {
+    bucket = "my-tf-state-bucket535845769543"
+    key    = "ebs-jenkins/terraform.tfstate"
     region = "us-east-1"
   }
 }
@@ -35,20 +45,6 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
-# EBS Volume для Jenkins Home
-resource "aws_ebs_volume" "jenkins_home" {
-  availability_zone = "${var.aws_region}a"
-  size              = var.jenkins_home_size
-  type              = "gp3"
-  encrypted         = true
-  iops              = 3000
-  throughput        = 125
-
-  tags = {
-    Name = "jenkins-home"
-  }
-}
-
 # EC2 Instance
 resource "aws_instance" "jenkins" {
   ami                    = data.aws_ami.amazon_linux.id
@@ -74,14 +70,12 @@ resource "aws_instance" "jenkins" {
     Name = "jenkins-master"
     Role = "jenkins"
   }
-
-  depends_on = [aws_ebs_volume.jenkins_home]
 }
 
 # Attach EBS Volume
 resource "aws_volume_attachment" "jenkins_home" {
   device_name = "/dev/sdf"
-  volume_id   = aws_ebs_volume.jenkins_home.id
+  volume_id   = data.terraform_remote_state.ebs_jenkins.outputs.volume_id
   instance_id = aws_instance.jenkins.id
 }
 

@@ -5,7 +5,7 @@ This module creates a cost-effective, production-ready Jenkins CI/CD server on A
 ## 🏗️ Architecture
 
 - **Instance**: t3.small (2 vCPU, 2GB RAM) - optimized for CI/CD workloads
-- **Storage**: 50GB EBS gp3 volume for Jenkins home directory
+- **Storage**: 30GB EBS gp3 volume for Jenkins home directory
 - **Network**: Deployed in public subnet with Elastic IP
 - **Security**: IP-restricted access with configurable CIDR blocks
 - **Automation**: Fully automated Jenkins installation and configuration

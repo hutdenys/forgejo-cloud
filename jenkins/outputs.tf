@@ -17,3 +17,8 @@ output "jenkins_instance_id" {
   description = "EC2 instance ID"
   value       = aws_instance.jenkins.id
 }
+
+output "jenkins_ebs_volume_id" {
+  description = "EBS volume ID used for Jenkins home"
+  value       = data.terraform_remote_state.ebs_jenkins.outputs.volume_id
+}

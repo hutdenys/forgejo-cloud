@@ -14,12 +14,6 @@ variable "key_pair_name" {
   type        = string
 }
 
-variable "jenkins_home_size" {
-  description = "Size of EBS volume for Jenkins home directory (GB)"
-  type        = number
-  default     = 5
-}
-
 variable "aws_region" {
   description = "AWS region"
   type        = string
