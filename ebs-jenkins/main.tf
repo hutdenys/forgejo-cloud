@@ -8,13 +8,6 @@ resource "aws_ebs_volume" "jenkins_home" {
   size              = var.volume_size
   type              = var.volume_type
   encrypted         = var.encrypted
-  iops              = var.iops
-  throughput        = var.throughput
-
-  # Prevent accidental deletion
-  lifecycle {
-    prevent_destroy = true
-  }
 
   tags = merge(var.tags, {
     Name       = var.volume_name

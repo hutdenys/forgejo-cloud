@@ -45,6 +45,88 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
+# IAM Role for Jenkins to manage EC2 instances
+resource "aws_iam_role" "jenkins_ec2_role" {
+  name = "jenkins-ec2-role-${random_string.suffix.result}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "jenkins-ec2-role"
+    Role = "jenkins"
+  }
+}
+
+# IAM Policy for Jenkins EC2 Plugin
+resource "aws_iam_policy" "jenkins_ec2_policy" {
+  name        = "jenkins-ec2-policy-${random_string.suffix.result}"
+  description = "Policy for Jenkins EC2 Plugin to manage spot instances"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeSpotInstanceRequests",
+          "ec2:DescribeSpotPriceHistory",
+          "ec2:RequestSpotInstances",
+          "ec2:CancelSpotInstanceRequests",
+          "ec2:DescribeInstances",
+          "ec2:DescribeImages",
+          "ec2:DescribeKeyPairs",
+          "ec2:DescribeRegions",
+          "ec2:DescribeAvailabilityZones",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSubnets",
+          "ec2:CreateTags",
+          "ec2:RunInstances",
+          "ec2:StopInstances",
+          "ec2:TerminateInstances",
+          "ec2:CreateImage",
+          "ec2:CopyImage",
+          "ec2:ModifyImageAttribute",
+          "ec2:DescribeInstanceTypes"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "jenkins-ec2-policy"
+    Role = "jenkins"
+  }
+}
+
+# Attach policy to role
+resource "aws_iam_role_policy_attachment" "jenkins_ec2_attach" {
+  role       = aws_iam_role.jenkins_ec2_role.name
+  policy_arn = aws_iam_policy.jenkins_ec2_policy.arn
+}
+
+# IAM Instance Profile
+resource "aws_iam_instance_profile" "jenkins_ec2_profile" {
+  name = "jenkins-ec2-profile-${random_string.suffix.result}"
+  role = aws_iam_role.jenkins_ec2_role.name
+
+  tags = {
+    Name = "jenkins-ec2-profile"
+    Role = "jenkins"
+  }
+}
+
 # EC2 Instance
 resource "aws_instance" "jenkins" {
   ami                    = data.aws_ami.amazon_linux.id
@@ -53,17 +135,18 @@ resource "aws_instance" "jenkins" {
   vpc_security_group_ids = [data.terraform_remote_state.network.outputs.jenkins_security_group_id]
   subnet_id              = data.terraform_remote_state.network.outputs.public_subnets[0]
   availability_zone      = "${var.aws_region}a"
+  iam_instance_profile   = aws_iam_instance_profile.jenkins_ec2_profile.name
 
   # Root volume
   root_block_device {
-    volume_type           = "gp3"
+    volume_type           = "gp2"
     volume_size           = 30
     encrypted             = true
     delete_on_termination = true
   }
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh", {
-    ebs_device_name = "/dev/nvme1n1"
+    ebs_device_name = "/dev/xvdf"
   }))
 
   tags = {

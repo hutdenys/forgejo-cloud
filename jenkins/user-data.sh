@@ -6,12 +6,12 @@ echo "Starting user-data script at $(date)"
 # Update system
 dnf update -y
 
-# Install Java 17
-dnf install -y java-17-amazon-corretto java-17-amazon-corretto-devel
+# Install Java 21
+dnf install -y java-21-amazon-corretto java-21-amazon-corretto-devel
 
 # Set JAVA_HOME
-echo 'JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto' >> /etc/environment
-export JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto
+echo 'JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto' >> /etc/environment
+export JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto
 
 java -version || { echo "Java installation failed"; exit 1; }
 
@@ -39,6 +39,7 @@ mount ${ebs_device_name} /var/lib/jenkins
 
 # Install Jenkins repository and key
 echo "Installing Jenkins repository..."
+dnf install -y wget
 wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
 rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
@@ -49,41 +50,30 @@ dnf install -y jenkins
 # Set proper ownership
 chown -R jenkins:jenkins /var/lib/jenkins
 
-# Install Docker (for builds)
-echo "Installing Docker..."
-dnf install -y docker
-systemctl enable docker
-systemctl start docker
-usermod -a -G docker jenkins
-
-# Install Git
-dnf install -y git
-
-# Install AWS CLI v2 with error handling
-echo "Installing AWS CLI..."
-dnf install -y curl unzip --allowerasing || echo "Curl installation issue, continuing..."
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" || wget "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -O "awscliv2.zip"
-unzip awscliv2.zip
-./aws/install
-rm -rf aws awscliv2.zip
-
 # Install useful tools
 echo "Installing additional tools..."
-dnf install -y wget nano htop --allowerasing
+dnf install -y nano htop git
+
+# Install Jenkins plugins via CLI (optional)
+echo "Setting up Jenkins plugins..."
+JENKINS_CLI_JAR="/var/lib/jenkins/jenkins-cli.jar"
 
 # Configure and start Jenkins
 echo "Starting Jenkins..."
 systemctl enable jenkins
 systemctl start jenkins
 
-# Wait for Jenkins to start
+# Wait for Jenkins to start and download CLI
 echo "Waiting for Jenkins to start..."
-sleep 30
+sleep 60
+
+# Download Jenkins CLI
+wget -O $JENKINS_CLI_JAR http://localhost:8080/jnlpJars/jenkins-cli.jar 2>/dev/null || echo "Jenkins CLI download will be available after setup"
 
 # Verify Jenkins is running
 systemctl status jenkins || echo "Jenkins failed to start initially"
 
-# Create a simple status script
+# Create a simple status script for debugging
 cat > /usr/local/bin/jenkins-status << 'EOF'
 #!/bin/bash
 echo "=== Jenkins Status ==="
@@ -103,5 +93,5 @@ EOF
 chmod +x /usr/local/bin/jenkins-status
 
 # Log completion
-echo "Jenkins installation completed at $(date)" >> /var/log/jenkins-install.log
+echo "Jenkins master installation completed at $(date)" >> /var/log/jenkins-install.log
 echo "User-data script completed successfully at $(date)"
