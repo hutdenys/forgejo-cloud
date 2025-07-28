@@ -486,6 +486,69 @@ jenkins-status  # Custom script included
 sudo journalctl -u jenkins -f
 ```
 
+## EC2 Plugin Configuration for Dynamic Agents
+
+After Jenkins is deployed, you need to configure the EC2 plugin to launch dynamic agents. Follow these steps:
+
+### 1. Install EC2 Plugin
+1. Go to **Manage Jenkins** → **Manage Plugins**
+2. Install the **Amazon EC2** plugin if not already installed
+3. Restart Jenkins if prompted
+
+### 2. Configure EC2 Cloud
+1. Go to **Manage Jenkins** → **Configure System**
+2. Scroll down to **Cloud** section and click **Add a new cloud** → **Amazon EC2**
+3. Configure the following settings:
+
+#### Basic Configuration:
+- **Name**: `aws-ec2-agents`
+- **Amazon EC2 Credentials**: Create AWS credentials with the IAM instance profile
+- **Region**: Use the same region as your infrastructure (e.g., `us-east-1`)
+
+#### AMI Configuration:
+- **AMI ID**: Use Amazon Linux 2023 AMI (check AWS console for latest)
+- **Instance Type**: `t3.micro` or `t3.small` for cost efficiency
+- **Security group names**: Use the output from `terraform output -raw jenkins_agents_security_group_id`
+- **Subnet IDs**: Use the output from `terraform output -raw jenkins_subnet_id` (public subnet for internet access)
+- **IAM Instance Profile**: Use the output from `terraform output -raw jenkins_iam_instance_profile`
+- **Associate Public IP**: **Enable** (required for public subnet internet access)
+
+#### SSH Configuration:
+- **Remote user**: `ec2-user`
+- **SSH Key**: Use the same key pair as Jenkins master (`forgejo-jenkins-key`)
+- **Remote FS root**: `/home/ec2-user/jenkins`
+
+#### Advanced Configuration:
+- **Usage**: `Use this node as much as possible`
+- **Instance Cap**: `5` (or desired maximum number of agents)
+- **Spot Configuration**: Enable for cost savings
+- **User Data**: Point to the init script:
+```bash
+#!/bin/bash
+# Download and run the agent initialization script
+wget -O /tmp/ec2-agent-init.sh https://raw.githubusercontent.com/your-repo/ec2-agent-init.sh
+chmod +x /tmp/ec2-agent-init.sh
+/tmp/ec2-agent-init.sh
+```
+
+### 3. Test Configuration
+1. Click **Test Connection** to verify AWS connectivity
+2. Save the configuration
+3. Trigger a build that requires an agent to test automatic provisioning
+
+### 4. Quick Setup Commands
+Get the required values from Terraform outputs:
+```bash
+# Get security group ID for agents
+terraform output -raw jenkins_agents_security_group_id
+
+# Get subnet ID
+terraform output -raw jenkins_subnet_id  
+
+# Get IAM instance profile name
+terraform output -raw jenkins_iam_instance_profile
+```
+
 ## Integration with Forgejo
 
 Jenkins can integrate with your Forgejo instance:
@@ -504,9 +567,37 @@ Since this is a simple setup without automated backups:
 
 ## Troubleshooting
 
-- **Can't access Jenkins**: Check security group allows your IP
-- **Jenkins won't start**: Check disk space and Java installation
-- **Build failures**: Ensure Docker is running and Jenkins user has permissions
+### Common Issues
+
+1. **Can't access Jenkins UI**: Check security group allows your IP
+2. **Jenkins won't start**: Check disk space and Java installation  
+3. **Build failures**: Ensure Docker is running and Jenkins user has permissions
+
+### EC2 Agent Connection Issues
+
+If you see SSH connection timeouts in Jenkins logs like:
+```
+Failed to connect via ssh: Connection timed out
+```
+
+**Cause**: EC2 instances launched by Jenkins are not using the correct security group.
+
+**Solution**:
+1. Verify EC2 plugin configuration uses `jenkins_agents_security_group_id`
+2. Check that the security group allows SSH (port 22) from Jenkins master
+3. Ensure instances are launched in the correct subnet
+
+**Debug Commands**:
+```bash
+# Check if the agent security group exists and has correct rules
+aws ec2 describe-security-groups --group-ids $(terraform output -raw jenkins_agents_security_group_id)
+
+# Find recently launched instances
+aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query 'Reservations[].Instances[?LaunchTime>`2025-07-25`][].{InstanceId:InstanceId,SecurityGroups:SecurityGroups,LaunchTime:LaunchTime}'
+
+# Test SSH connectivity from Jenkins master to agent
+ssh -i forgejo-jenkins-key.pem ec2-user@<agent-private-ip>
+```
 
 ## Dependencies
 

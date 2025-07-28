@@ -37,3 +37,8 @@ output "jenkins_security_group_id" {
   description = "Jenkins Security Group ID"
   value       = aws_security_group.jenkins.id
 }
+
+output "jenkins_agents_security_group_id" {
+  description = "Jenkins Agents Security Group ID"
+  value       = aws_security_group.jenkins_agents.id
+}

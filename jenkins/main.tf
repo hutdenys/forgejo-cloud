@@ -80,26 +80,40 @@ resource "aws_iam_policy" "jenkins_ec2_policy" {
         Effect = "Allow"
         Action = [
           "ec2:DescribeSpotInstanceRequests",
-          "ec2:DescribeSpotPriceHistory",
-          "ec2:RequestSpotInstances",
           "ec2:CancelSpotInstanceRequests",
+          "ec2:GetConsoleOutput",
+          "ec2:RequestSpotInstances",
+          "ec2:RunInstances",
+          "ec2:StartInstances",
+          "ec2:StopInstances",
+          "ec2:TerminateInstances",
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
           "ec2:DescribeInstances",
-          "ec2:DescribeImages",
+          "ec2:DescribeInstanceTypes",
           "ec2:DescribeKeyPairs",
           "ec2:DescribeRegions",
+          "ec2:DescribeImages",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeSecurityGroups",
           "ec2:DescribeSubnets",
-          "ec2:CreateTags",
-          "ec2:RunInstances",
-          "ec2:StopInstances",
-          "ec2:TerminateInstances",
-          "ec2:CreateImage",
-          "ec2:CopyImage",
-          "ec2:ModifyImageAttribute",
-          "ec2:DescribeInstanceTypes"
+          "iam:ListInstanceProfilesForRole",
+          "iam:PassRole",
+          "ec2:GetPasswordData"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:CreateServiceLinkedRole"
+        ]
+        Resource = "arn:aws:iam::*:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot"
+        Condition = {
+          StringEquals = {
+            "iam:AWSServiceName" = "spot.amazonaws.com"
+          }
+        }
       }
     ]
   })
@@ -126,6 +140,7 @@ resource "aws_iam_instance_profile" "jenkins_ec2_profile" {
     Role = "jenkins"
   }
 }
+
 
 # EC2 Instance
 resource "aws_instance" "jenkins" {
