@@ -22,3 +22,8 @@ output "alb_zone_id" {
   description = "Zone ID of the Application Load Balancer"
   value       = module.elb.alb_zone_id
 }
+
+output "jenkins_target_group_arn" {
+  description = "ARN of the Jenkins target group"
+  value       = module.elb.jenkins_target_group_arn
+}

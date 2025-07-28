@@ -57,3 +57,9 @@ variable "alb_security_group_id" {
   description = "Security Group ID for ALB"
   type        = string
 }
+
+variable "jenkins_domain" {
+  description = "Jenkins subdomain (e.g., jenkins.example.com)"
+  type        = string
+  default     = ""
+}

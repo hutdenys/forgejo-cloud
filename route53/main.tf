@@ -46,7 +46,7 @@ data "terraform_remote_state" "app" {
   }
 }
 
-# Get Jenkins public IP from jenkins module (optional)
+# Get Jenkins public IP from jenkins module
 data "terraform_remote_state" "jenkins" {
   backend = "s3"
   config = {
@@ -78,6 +78,10 @@ resource "aws_route53_record" "jenkins" {
   zone_id = local.hosted_zone_id
   name    = "${var.jenkins_subdomain}.${var.domain_name}"
   type    = "A"
-  ttl     = 300
-  records = [data.terraform_remote_state.jenkins[0].outputs.jenkins_public_ip]
+
+  alias {
+    name                   = data.terraform_remote_state.app.outputs.alb_dns_name
+    zone_id                = data.terraform_remote_state.app.outputs.alb_zone_id
+    evaluate_target_health = false
+  }
 }

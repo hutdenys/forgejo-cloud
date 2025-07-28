@@ -166,6 +166,15 @@ resource "aws_security_group" "jenkins" {
     cidr_blocks = [var.jenkins_allowed_ip_cidr]
   }
 
+  # Allow ALB to access Jenkins on port 8080
+  ingress {
+    description     = "Jenkins UI from ALB"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
   ingress {
     description = "SSH"
     from_port   = 22

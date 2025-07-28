@@ -47,6 +47,7 @@ module "elb" {
   subnets               = data.terraform_remote_state.network.outputs.public_subnets
   certificate_arn       = data.terraform_remote_state.acm.outputs.certificate_arn
   alb_security_group_id = data.terraform_remote_state.network.outputs.alb_security_group_id
+  jenkins_domain        = var.jenkins_domain
 }
 
 # ECS Module

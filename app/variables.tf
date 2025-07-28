@@ -15,3 +15,9 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+
+variable "jenkins_domain" {
+  description = "Jenkins subdomain (e.g., jenkins.example.com)"
+  type        = string
+  default     = ""
+}

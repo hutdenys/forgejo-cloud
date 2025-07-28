@@ -22,6 +22,16 @@ data "terraform_remote_state" "ebs_jenkins" {
   }
 }
 
+# Remote state for app (to get ALB target group)
+data "terraform_remote_state" "app" {
+  backend = "s3"
+  config = {
+    bucket = "my-tf-state-bucket535845769543"
+    key    = "app/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
 # Latest Amazon Linux 2023 AMI
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -187,4 +197,12 @@ resource "aws_eip" "jenkins" {
   }
 
   depends_on = [aws_instance.jenkins]
+}
+
+# Register Jenkins instance with ALB target group
+resource "aws_lb_target_group_attachment" "jenkins" {
+  count            = var.use_alb ? 1 : 0
+  target_group_arn = data.terraform_remote_state.app.outputs.jenkins_target_group_arn
+  target_id        = aws_instance.jenkins.id
+  port             = 8080
 }

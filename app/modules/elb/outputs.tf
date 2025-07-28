@@ -17,3 +17,8 @@ output "alb_arn" {
   description = "ARN of the load balancer"
   value       = module.alb.arn
 }
+
+output "jenkins_target_group_arn" {
+  description = "ARN of the Jenkins target group"
+  value       = module.alb.target_groups["jenkins"].arn
+}

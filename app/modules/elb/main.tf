@@ -23,6 +23,25 @@ module "alb" {
 
       health_check = var.health_check
     }
+
+    jenkins = {
+      name_prefix      = "jkns"
+      backend_protocol = "HTTP"
+      backend_port     = 8080
+      target_type      = "instance"
+
+      create_attachment = false
+
+      health_check = {
+        enabled             = true
+        path                = "/login"
+        healthy_threshold   = 2
+        unhealthy_threshold = 10
+        timeout             = 5
+        interval            = 30
+        matcher             = "200"
+      }
+    }
   }
 
   listeners = {
@@ -41,6 +60,23 @@ module "alb" {
       port            = 443
       protocol        = "HTTPS"
       certificate_arn = var.certificate_arn
+
+      rules = {
+        jenkins = {
+          priority = 100
+
+          conditions = [{
+            host_header = {
+              values = [var.jenkins_domain]
+            }
+          }]
+
+          actions = [{
+            type             = "forward"
+            target_group_key = "jenkins"
+          }]
+        }
+      }
 
       forward = {
         target_group_key = "forgejo"
